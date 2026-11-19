@@ -1,0 +1,149 @@
+FFFFFF                                                                   [100%]
+=================================== FAILURES ===================================
+_____________ test_two_operators_contend_for_same_overlimit_source _____________
+
+    def test_two_operators_contend_for_same_overlimit_source():
+        c1 = TestClient(A.app)
+        c2 = TestClient(A.app)
+        h1 = _login(c1)
+        h2 = _login(c2)
+    
+>       fp = _failpoints()
+             ^^^^^^^^^^^^^
+
+tests/test_disposition_contention.py:46: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def _failpoints():
+        fp = getattr(A, "FAILPOINTS", None)
+>       assert fp is not None, "超限处置争用注入口未落地"
+E       AssertionError: 超限处置争用注入口未落地
+E       assert None is not None
+
+tests/test_disposition_contention.py:31: AssertionError
+____________________ test_half_written_output_state_is_red _____________________
+
+    def test_half_written_output_state_is_red():
+        """只改输出牌面、不落处置，必须被 integrity 判红，且五视图不得双态。"""
+        c, h = _client_and_headers()
+        assert _mode(c, h, "物流源") == "冻结"
+    
+        # 模拟“半改输出态”：直接改 sources.output_mode，不写处置册/意图。
+        with A.connect() as conn:
+            conn.execute(
+                "UPDATE sources SET output_mode='降级只读' WHERE name='物流源'"
+            )
+    
+        r = c.get("/api/dispositions/integrity", headers=h)
+>       assert r.status_code == 200, r.text
+E       AssertionError: {"detail":"Not Found"}
+E       assert 404 == 200
+E        +  where 404 = <Response [404 Not Found]>.status_code
+
+tests/test_disposition_failure.py:52: AssertionError
+_____________ test_catchup_releases_register_and_stays_consistent ______________
+
+    def test_catchup_releases_register_and_stays_consistent():
+        """补齐恢复必须解除生效处置，处置册与牌面不得打架，且不篡改处置类别。"""
+        c, h = _client_and_headers()
+        c.post(
+            "/api/arrivals",
+            headers=h,
+            json={"source": "订单源", "source_clock": "2026-11-16T10:00:00",
+                  "ingest_clock": "2026-11-16T11:00:00"},
+        )
+        d = c.post("/api/dispositions", headers=h,
+                   json={"source": "订单源", "kind": "冻结", "operator": "甲"})
+>       assert d.status_code == 200 and d.json()["output_mode"] == "冻结"
+E       assert (404 == 200)
+E        +  where 404 = <Response [404 Not Found]>.status_code
+
+tests/test_disposition_failure.py:81: AssertionError
+_____ test_disposition_failure_rolls_back_and_resumes[after_intent_commit] _____
+
+point = 'after_intent_commit'
+
+    @pytest.mark.parametrize("point", ["after_intent_commit", "during_output_update"])
+    def test_disposition_failure_rolls_back_and_resumes(point):
+        """乙路径：先影子意图，再条件更新输出态；中途失败整笔撤回、可续推。"""
+        c, h = _client_and_headers()
+>       fp = _failpoints()
+             ^^^^^^^^^^^^^
+
+tests/test_disposition_failure.py:101: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def _failpoints():
+        fp = getattr(A, "FAILPOINTS", None)
+>       assert fp is not None, "超限处置失败注入口未落地"
+E       AssertionError: 超限处置失败注入口未落地
+E       assert None is not None
+
+tests/test_disposition_failure.py:93: AssertionError
+____ test_disposition_failure_rolls_back_and_resumes[during_output_update] _____
+
+point = 'during_output_update'
+
+    @pytest.mark.parametrize("point", ["after_intent_commit", "during_output_update"])
+    def test_disposition_failure_rolls_back_and_resumes(point):
+        """乙路径：先影子意图，再条件更新输出态；中途失败整笔撤回、可续推。"""
+        c, h = _client_and_headers()
+>       fp = _failpoints()
+             ^^^^^^^^^^^^^
+
+tests/test_disposition_failure.py:101: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def _failpoints():
+        fp = getattr(A, "FAILPOINTS", None)
+>       assert fp is not None, "超限处置失败注入口未落地"
+E       AssertionError: 超限处置失败注入口未落地
+E       assert None is not None
+
+tests/test_disposition_failure.py:93: AssertionError
+_________________________ test_lag_freeze_and_catchup __________________________
+
+    def test_lag_freeze_and_catchup():
+        c = TestClient(app)
+        assert c.get("/api/health").json()["product"] == "源到达SLA"
+        h = {"Authorization": "Bearer " + c.post("/api/login", json={"username":"admin","password":"123456"}).json()["token"]}
+        r = c.post("/api/arrivals", headers=h, json={"source":"订单源","source_clock":"2026-11-16T10:00:00","ingest_clock":"2026-11-16T11:00:00"})
+        # 采集入库只登记与分级，不擅自改输出态。
+        assert r.status_code == 200 and r.json()["level"] == "违约"
+>       assert r.json()["required_mode"] == "冻结"
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'required_mode'
+
+tests/test_smoke.py:18: KeyError
+=============================== warnings summary ===============================
+.venv/lib/python3.11/site-packages/fastapi/testclient.py:1
+  /workspace/.venv/lib/python3.11/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+backend/app.py:97
+  /workspace/backend/app.py:97: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("startup")
+
+.venv/lib/python3.11/site-packages/fastapi/applications.py:4723
+  /workspace/.venv/lib/python3.11/site-packages/fastapi/applications.py:4723: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    return self.router.on_event(event_type)  # ty: ignore[deprecated]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_disposition_contention.py::test_two_operators_contend_for_same_overlimit_source
+FAILED tests/test_disposition_failure.py::test_half_written_output_state_is_red
+FAILED tests/test_disposition_failure.py::test_catchup_releases_register_and_stays_consistent
+FAILED tests/test_disposition_failure.py::test_disposition_failure_rolls_back_and_resumes[after_intent_commit]
+FAILED tests/test_disposition_failure.py::test_disposition_failure_rolls_back_and_resumes[during_output_update]
+FAILED tests/test_smoke.py::test_lag_freeze_and_catchup - KeyError: 'required...
+6 failed, 3 warnings in 3.41s
